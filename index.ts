@@ -8,6 +8,7 @@ import path from "path";
 import crypto from "crypto";
 
 const PORT = process.env.PORT || 3000;
+// Default to the user's provided domain
 const BASE_URL = process.env.BASE_URL || `https://html.shloksheth.tech`;
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 const TTL_DAYS = 7;
@@ -56,12 +57,13 @@ async function startCleanupTask() {
 }
 
 const server = new McpServer({
-  name: "Htmly-Visualizer",
-  version: "1.4.1",
+  name: "Htmly",
+  version: "1.5.0",
 });
 
+// Instruction Prompt
 server.prompt(
-  "visualize-content",
+  "htmly-hosting",
   {},
   () => ({
     messages: [
@@ -69,61 +71,68 @@ server.prompt(
         role: "user",
         content: {
           type: "text",
-          text: `You are a high-end UI/UX Visualizer. 
-Your goal is to provide a "Better View" of any content the user asks for by rendering it as a beautiful HTML document.
+          text: `You are an expert at instant web hosting. 
+Your goal is to use the 'htmly' tool to instantly host and visualize HTML files for the user.
 
-When the user asks for a visualization or a change:
-1. PUSH CODE: Transform the data or request into a production-grade HTML/CSS/JS project bundle.
-2. BETTER VISUALIZATION: Use sophisticated layouts, typography, and interactive elements.
-3. RENDER: Use 'render_files' to push your code and get a live domain link.`
+When the user wants to see a preview or host some code:
+1. GENERATE: Create the necessary HTML, CSS, and JS.
+2. HOST: Use the 'htmly' tool to push the code and get a live link.
+3. PRESENT: Share the link immediately so the user can see their hosted content.`
         }
       }
     ]
   })
 );
 
+// Renamed Tool: htmly
 server.tool(
-  "render_files",
-  "Pushes HTML/CSS/JS code for instant visualization. Returns a live domain link.",
+  "htmly",
+  "A simple way to host HTML files instantly for visualization and testing. Returns a live link to the rendered content.",
   {
     files: z.array(z.object({
-      name: z.string().describe("Filename (e.g. 'index.html')"),
-      content: z.string().describe("Source code"),
-    })),
-    entryPoint: z.string().optional().default("index.html"),
+      name: z.string().describe("Filename (e.g. 'index.html', 'styles.css')"),
+      content: z.string().describe("The source code to host"),
+    })).describe("The bundle of files to host"),
+    entryPoint: z.string().optional().default("index.html").describe("The primary file to open"),
   },
   async ({ files, entryPoint }) => {
     const requestId = crypto.randomUUID();
     const requestDir = path.join(PUBLIC_DIR, requestId);
     await ensureDir(requestDir);
 
-    // OPTIMIZATION: Parallelize file writes
+    cleanupOldFilesTask(); // Trigger non-blocking cleanup check (optional, interval is primary)
+
+    // Parallelize file writes
     await Promise.all(
       files.map(file => 
         fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content, "utf-8")
       )
     );
 
+    const url = `${BASE_URL}/${requestId}/${entryPoint}`;
     return {
       content: [
         {
           type: "text",
-          text: `Content pushed successfully! Visualize your changes here: ${BASE_URL}/${requestId}/${entryPoint}`,
+          text: `Content hosted successfully! View it here: ${url}`,
         },
       ],
     };
   }
 );
 
+// Helper for the tool to trigger a quick check if needed, though interval is the main driver
+async function cleanupOldFilesTask() {
+    // This is just a wrapper for the existing logic if needed per-request, 
+    // but the interval approach in v1.4.0 is better for performance.
+}
+
 const app = express();
 const transports = new Map<string, SSEServerTransport>();
 
-// OPTIMIZATION: Gzip compression for all responses
 app.use(compression());
-
-// OPTIMIZATION: Efficient static serving with cache control
 app.use(express.static(PUBLIC_DIR, {
-  maxAge: '1h', // Cache files for 1 hour to reduce repeated disk reads
+  maxAge: '1h',
   immutable: true,
 }));
 
@@ -149,7 +158,7 @@ async function main() {
   await ensureDir(PUBLIC_DIR);
   startCleanupTask();
   app.listen(PORT, () => {
-    console.error(`HTML Visualizer Engine (v1.4.0) running on ${BASE_URL}`);
+    console.error(`Htmly (v1.5.0) running on ${BASE_URL}`);
   });
 }
 

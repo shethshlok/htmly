@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Htmly | MCP Visualizer Engine</title>
+    <title>Htmly | Instant HTML Hosting</title>
     <style>
         :root {
             --bg: #050505;
@@ -162,10 +162,10 @@
 <body>
     <div class="container">
         <header>
-            <div class="badge">Htmly v1.4.1 [Stable]</div>
+            <div class="badge">Htmly v1.5.0 [Stable]</div>
             <h1>Htmly.</h1>
             <p style="color: var(--text-dim); font-size: 1.2rem; margin-top: 1rem; max-width: 700px;">
-                The high-fidelity HTML rendering engine for Model Context Protocol. Hosted at <span class="accent-text">html.shloksheth.tech</span>.
+                Instant HTML hosting and visualization for Model Context Protocol. Hosted at <span class="accent-text">html.shloksheth.tech</span>.
             </p>
         </header>
 
@@ -178,7 +178,7 @@
                         <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1rem;">Add the following to your <code>claude_desktop_config.json</code>:</p>
                         <pre>{
   "mcpServers": {
-    "visualizer": {
+    "htmly": {
       "url": "https://html.shloksheth.tech/sse"
     }
   }
@@ -186,10 +186,26 @@
                     </div>
                     <div class="setup-step">
                         <span class="step-title">2. Custom CLI / MCP Clients</span>
-                        <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1rem;">Use the SSE transport URL directly in your tool of choice:</p>
+                        <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1rem;">Use the SSE transport URL directly:</p>
                         <pre>https://html.shloksheth.tech/sse</pre>
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <section id="usage">
+            <h2>MCP Tool: htmly</h2>
+            <div class="card">
+                <p style="margin-bottom: 1.5rem;">The <code>htmly</code> tool is a simple way to host and visualize HTML files instantly.</p>
+                <pre>
+{
+  "files": [
+    { "name": "index.html", "content": "&lt;html&gt;...&lt;/html&gt;" },
+    { "name": "styles.css", "content": "..." }
+  ],
+  "entryPoint": "index.html"
+}
+                </pre>
             </div>
         </section>
 
@@ -197,13 +213,13 @@
             <h2>The Protocol Mission</h2>
             <div class="card">
                 <p style="font-size: 1.5rem; font-weight: 300; line-height: 1.4;">
-                    This MCP tool is dedicated to <span class="accent-text">visualizing changes</span> in real-time. By "pushing" code directly to the engine, agents can transform abstract data into production-grade HTML documents, providing the user with a superior domain-based view of their content.
+                    Htmly is dedicated to <span class="accent-text">instant visualization</span>. By pushing code directly to the engine, agents can host production-grade HTML documents instantly, providing the user with a superior domain-based view of their content.
                 </p>
             </div>
         </section>
 
         <section>
-            <h2>Push-to-Visualize Lifecycle</h2>
+            <h2>Hosting Lifecycle</h2>
             <div class="flow-visual">
                 <div class="flow-step">
                     <span>ACTION</span>
@@ -212,26 +228,26 @@
                 <div style="color: var(--border); font-size: 2rem;">→</div>
                 <div class="flow-step">
                     <span>ENGINE</span>
-                    <strong>RENDER BUNDLE</strong>
+                    <strong>INSTANT HOST</strong>
                 </div>
                 <div style="color: var(--border); font-size: 2rem;">→</div>
                 <div class="flow-step">
                     <span>OUTPUT</span>
-                    <strong>LIVE DOMAIN</strong>
+                    <strong>LIVE LINK</strong>
                 </div>
             </div>
         </section>
 
         <section>
-            <h2>System Persona: The Visualizer</h2>
+            <h2>System Persona: The Host</h2>
             <div class="grid">
                 <div class="grid-item">
-                    <h3>High Fidelity</h3>
-                    <p>The agent is primed to prioritize sophisticated layouts, typography, and interactive elements for every visualization.</p>
+                    <h3>Zero Latency</h3>
+                    <p>Designed for speed. Files are written and hosted in parallel for near-instant visualization.</p>
                 </div>
                 <div class="grid-item">
                     <h3>Better Views</h3>
-                    <p>Designed to support complex content structures, ensuring the user gets the best possible view of their data.</p>
+                    <p>Primed to provide high-fidelity renderings of any content, making changes easy to track and visualize.</p>
                 </div>
                 <div class="grid-item">
                     <h3>Domain Isolation</h3>
@@ -241,12 +257,7 @@
         </section>
 
         <div class="footer">
-            System Operational // SSE Transport Active // Build: 1.3.1
-        </div>
-    </div>
-</body>
-</html>
-.3.1
+            System Operational // SSE Transport Active // Build: 1.5.0
         </div>
     </div>
 </body>
