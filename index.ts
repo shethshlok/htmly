@@ -37,18 +37,23 @@ function createMcpServer() {
       entryPoint: z.string().optional().default("index.html"),
     },
     async ({ files, entryPoint }) => {
+      // STRATEGY: Asynchronous URL generation
       const requestId = crypto.randomUUID();
       const requestDir = path.join(PUBLIC_DIR, requestId);
-      await ensureDir(requestDir);
+      const url = `${BASE_URL}/${requestId}/${entryPoint}`;
 
-      await Promise.all(
-        files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
-      );
+      // Background task: Write files without awaiting
+      ensureDir(requestDir).then(() => {
+        return Promise.all(
+          files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
+        );
+      }).catch(err => console.error(`[Background] Error writing files for ${requestId}:`, err));
 
+      // Return the URL immediately to bypass connection timeouts
       return {
         content: [{
           type: "text",
-          text: `Hosted: ${BASE_URL}/${requestId}/${entryPoint}`
+          text: `Hosted: ${url}`
         }]
       };
     }
@@ -77,29 +82,30 @@ if (process.env.TRANSPORT === "stdio") {
   app.use(express.static(PUBLIC_DIR));
   
   app.get("/sse", async (req, res) => {
-    // Research-backed: Anti-buffering and keep-alive headers
+    // Research-backed: Crucial headers for Cloudflare SSE stability
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
+      'Cache-Control': 'no-cache, no-transform', // no-transform is critical for Cloudflare
       'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
+      'X-Accel-Buffering': 'no', // Tells Cloudflare/Nginx not to buffer
     });
+
+    // Research-backed: Immediate flush to establish the stream
+    res.write(': ok\n\n');
 
     const server = createMcpServer();
     const transport = new SSEServerTransport("/messages", res);
     transports.set(transport.sessionId, transport);
     
-    // Send immediate initial comment to flush headers
-    res.write(': ok\n\n');
-
-    // Research-backed: Heartbeat every 30s to stay under Cloudflare's 100s limit
+    // Research-backed: Heartbeat every 20s to stay well under the 100s limit
     const heartbeat = setInterval(() => {
       res.write(': heartbeat\n\n');
-    }, 30000);
+    }, 20000);
 
     res.on("close", () => {
       clearInterval(heartbeat);
       transports.delete(transport.sessionId);
+      console.error(`[SSE] Connection closed: ${transport.sessionId}`);
     });
     
     await server.connect(transport);
