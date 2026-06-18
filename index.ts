@@ -1,9 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import express from "express";
-import compression from "compression";
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
@@ -20,106 +18,58 @@ async function ensureDir(dir: string) {
   }
 }
 
-function createMcpServer() {
-  const server = new McpServer({
-    name: "Htmly",
-    version: "1.5.0",
-  });
+const server = new McpServer({ name: "Htmly", version: "2.0.0" });
 
-  server.tool(
-    "htmly",
-    "Host HTML/CSS/JS instantly for preview.",
-    {
-      files: z.array(z.object({
-        name: z.string(),
-        content: z.string(),
-      })),
-      entryPoint: z.string().optional().default("index.html"),
-    },
-    async ({ files, entryPoint }) => {
-      // STRATEGY: Asynchronous URL generation
-      const requestId = crypto.randomUUID();
-      const requestDir = path.join(PUBLIC_DIR, requestId);
-      const url = `${BASE_URL}/${requestId}/${entryPoint}`;
+// The Core Logic
+async function hostFiles(files: { name: string, content: string }[], entryPoint: string = "index.html") {
+  const requestId = crypto.randomUUID();
+  const requestDir = path.join(PUBLIC_DIR, requestId);
+  await ensureDir(requestDir);
 
-      // Background task: Write files without awaiting
-      ensureDir(requestDir).then(() => {
-        return Promise.all(
-          files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
-        );
-      }).catch(err => console.error(`[Background] Error writing files for ${requestId}:`, err));
-
-      // Return the URL immediately to bypass connection timeouts
-      return {
-        content: [{
-          type: "text",
-          text: `Hosted: ${url}`
-        }]
-      };
-    }
+  await Promise.all(
+    files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
   );
 
-  return server;
+  return `${BASE_URL}/${requestId}/${entryPoint}`;
 }
 
-const app = express();
+// 1. MCP Tool (for Gemini CLI)
+server.tool("htmly", "Host HTML instantly.", {
+  files: z.array(z.object({ name: z.string(), content: z.string() })),
+  entryPoint: z.string().optional().default("index.html"),
+}, async ({ files, entryPoint }) => {
+  const url = await hostFiles(files, entryPoint);
+  return { content: [{ type: "text", text: `Hosted: ${url}` }] };
+});
 
-// Research-backed: Disable compression for SSE to prevent buffering
-app.use(compression({
-  filter: (req, res) => {
-    if (req.headers['accept'] === 'text/event-stream') return false;
-    return compression.filter(req, res);
-  }
-}));
-
-if (process.env.TRANSPORT === "stdio") {
-  const server = createMcpServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-} else {
-  const transports = new Map<string, SSEServerTransport>();
-
-  app.use(express.static(PUBLIC_DIR));
-  
-  app.get("/sse", async (req, res) => {
-    // Research-backed: Crucial headers for Cloudflare SSE stability
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform', // no-transform is critical for Cloudflare
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no', // Tells Cloudflare/Nginx not to buffer
-    });
-
-    // Research-backed: Immediate flush to establish the stream
-    res.write(': ok\n\n');
-
-    const server = createMcpServer();
-    const transport = new SSEServerTransport("/messages", res);
-    transports.set(transport.sessionId, transport);
-    
-    // Research-backed: Heartbeat every 20s to stay well under the 100s limit
-    const heartbeat = setInterval(() => {
-      res.write(': heartbeat\n\n');
-    }, 20000);
-
-    res.on("close", () => {
-      clearInterval(heartbeat);
-      transports.delete(transport.sessionId);
-      console.error(`[SSE] Connection closed: ${transport.sessionId}`);
-    });
-    
-    await server.connect(transport);
-  });
-
-  app.post("/messages", express.json(), async (req, res) => {
-    const transport = transports.get(req.query.sessionId as string);
-    if (transport) {
-      await transport.handlePostMessage(req, res);
-    } else {
-      res.status(404).send("Session not found");
-    }
-  });
-
+// 2. Main Entry Point
+async function main() {
   await ensureDir(PUBLIC_DIR);
-  app.listen(PORT, "0.0.0.0", () => console.error(`Htmly (v1.5.0) ready at ${BASE_URL}`));
+
+  // If TRANSPORT=stdio, run as MCP server
+  if (process.env.TRANSPORT === "stdio") {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  } else {
+    // Otherwise, run as a Simple REST API
+    const app = express();
+    app.use(express.json());
+    app.use(express.static(PUBLIC_DIR));
+
+    app.post("/host", async (req, res) => {
+      try {
+        const { files, entryPoint } = req.body;
+        const url = await hostFiles(files, entryPoint);
+        res.json({ url });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to host files" });
+      }
+    });
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.error(`Simple Htmly API running at ${BASE_URL}`);
+    });
+  }
 }
+
+main().catch(console.error);
