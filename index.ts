@@ -11,6 +11,7 @@ import crypto from "crypto";
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `https://html.shloksheth.tech`;
 const PUBLIC_DIR = path.join(process.cwd(), "public");
+const SSE_HEARTBEAT_INTERVAL_MS = 25_000;
 
 async function ensureDir(dir: string) {
   try {
@@ -84,12 +85,32 @@ app.get("/sse", async (req, res) => {
   const server = createMcpServer();
   const transport = new SSEServerTransport("/messages", res);
   transports.set(transport.sessionId, transport);
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let closed = false;
   
-  res.on("close", () => {
+  const cleanup = async () => {
+    if (closed) return;
+    closed = true;
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = undefined;
+    }
     transports.delete(transport.sessionId);
+    await server.close();
+  };
+
+  res.on("close", () => {
+    cleanup().catch(console.error);
   });
   
   await server.connect(transport);
+  if (closed) return;
+
+  heartbeat = setInterval(() => {
+    if (!res.destroyed) {
+      res.write(`: heartbeat ${Date.now()}\n\n`);
+    }
+  }, SSE_HEARTBEAT_INTERVAL_MS);
 });
 
 app.post("/messages", async (req, res) => {
