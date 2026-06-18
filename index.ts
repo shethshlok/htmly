@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import express from "express";
+import compression from "compression";
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
@@ -56,23 +57,42 @@ function createMcpServer() {
   return server;
 }
 
+const app = express();
+
+// Research-backed: Disable compression for SSE to prevent buffering
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['accept'] === 'text/event-stream') return false;
+    return compression.filter(req, res);
+  }
+}));
+
 if (process.env.TRANSPORT === "stdio") {
   const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 } else {
-  const app = express();
   const transports = new Map<string, SSEServerTransport>();
 
   app.use(express.static(PUBLIC_DIR));
   
   app.get("/sse", async (req, res) => {
-    console.error(`[SSE] New connection request`);
+    // Research-backed: Anti-buffering and keep-alive headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
     const server = createMcpServer();
     const transport = new SSEServerTransport("/messages", res);
     transports.set(transport.sessionId, transport);
     
-    // Heartbeat to keep Cloudflare connection alive
+    // Send immediate initial comment to flush headers
+    res.write(': ok\n\n');
+
+    // Research-backed: Heartbeat every 30s to stay under Cloudflare's 100s limit
     const heartbeat = setInterval(() => {
       res.write(': heartbeat\n\n');
     }, 30000);
@@ -80,7 +100,6 @@ if (process.env.TRANSPORT === "stdio") {
     res.on("close", () => {
       clearInterval(heartbeat);
       transports.delete(transport.sessionId);
-      console.error(`[SSE] Connection closed: ${transport.sessionId}`);
     });
     
     await server.connect(transport);
@@ -96,5 +115,5 @@ if (process.env.TRANSPORT === "stdio") {
   });
 
   await ensureDir(PUBLIC_DIR);
-  app.listen(PORT, () => console.error(`Htmly running on port ${PORT} (SSE mode)`));
+  app.listen(PORT, () => console.error(`Htmly (v1.5.0) ready at ${BASE_URL}`));
 }
