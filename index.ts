@@ -33,29 +33,33 @@ async function hostFilesAsync(files: { name: string, content: string }[], entryP
   return url;
 }
 
-const server = new McpServer({ name: "Htmly", version: "2.2.0" });
+function createMcpServer() {
+  const server = new McpServer({ name: "Htmly", version: "2.2.0" });
 
-server.prompt(
-  "visualize",
-  { content: z.string().describe("Content to visualize") },
-  ({ content }) => ({
-    messages: [{
-      role: "user",
-      content: {
-        type: "text",
-        text: `You are a high-end UI/UX Visualizer. Render this content as a beautiful HTML document using Htmly.\n\n<content>\n${content}\n</content>`
-      }
-    }]
-  })
-);
+  server.prompt(
+    "visualize",
+    { content: z.string().describe("Content to visualize") },
+    ({ content }) => ({
+      messages: [{
+        role: "user",
+        content: {
+          type: "text",
+          text: `You are a high-end UI/UX Visualizer. Render this content as a beautiful HTML document using Htmly.\n\n<content>\n${content}\n</content>`
+        }
+      }]
+    })
+  );
 
-server.tool("htmly", "Host HTML instantly for visualization.", {
-  files: z.array(z.object({ name: z.string(), content: z.string() })),
-  entryPoint: z.string().optional().default("index.html"),
-}, async ({ files, entryPoint }) => {
-  const url = await hostFilesAsync(files, entryPoint);
-  return { content: [{ type: "text", text: `Hosted: ${url}` }] };
-});
+  server.tool("htmly", "Host HTML instantly for visualization.", {
+    files: z.array(z.object({ name: z.string(), content: z.string() })),
+    entryPoint: z.string().optional().default("index.html"),
+  }, async ({ files, entryPoint }) => {
+    const url = await hostFilesAsync(files, entryPoint);
+    return { content: [{ type: "text", text: `Hosted: ${url}` }] };
+  });
+
+  return server;
+}
 
 const app = express();
 const transports = new Map<string, SSEServerTransport>();
@@ -77,6 +81,7 @@ app.post("/host", express.json(), async (req, res) => {
 });
 
 app.get("/sse", async (req, res) => {
+  const server = createMcpServer();
   const transport = new SSEServerTransport("/messages", res);
   transports.set(transport.sessionId, transport);
   
@@ -101,6 +106,7 @@ async function main() {
   await ensureDir(PUBLIC_DIR);
 
   if (process.env.TRANSPORT === "stdio") {
+    const server = createMcpServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } else {
