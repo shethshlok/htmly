@@ -20,58 +20,34 @@ async function ensureDir(dir: string) {
   }
 }
 
-/**
- * Core Logic: Generates a URL immediately and writes files in the background.
- * This "Predictive" approach bypasses Cloudflare streaming timeouts.
- */
 async function hostFilesAsync(files: { name: string, content: string }[], entryPoint: string = "index.html") {
   const requestId = crypto.randomUUID();
   const requestDir = path.join(PUBLIC_DIR, requestId);
   const url = `${BASE_URL}/${requestId}/${entryPoint}`;
 
-  // Fire-and-forget background writing
   ensureDir(requestDir).then(() => {
     return Promise.all(
       files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
     );
-  }).catch(err => console.error(`[Asynchronous Work] Error writing files for ${requestId}:`, err));
+  }).catch(err => console.error(`[Async] Error writing ${requestId}:`, err));
 
   return url;
 }
 
 function createMcpServer() {
-  const server = new McpServer({ name: "Htmly", version: "2.1.0" });
+  const server = new McpServer({ name: "Htmly", version: "2.2.0" });
 
   server.prompt(
     "visualize",
-    {
-      content: z.string().describe("The content, data, or request to visualize"),
-    },
+    { content: z.string().describe("Content to visualize") },
     ({ content }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text: `You are a high-end UI/UX Visualizer. 
-Your goal is to provide a "Better View" of the following content by rendering it as a beautiful, production-grade HTML document:
-
-<content_to_visualize>
-${content}
-</content_to_visualize>
-
-Why use Htmly:
-- INSTANT HOSTING: Transforms raw code into a live, shareable URL immediately.
-- BETTER CONTEXT: Complex data is easier to understand when presented through a refined, interactive interface.
-
-Design Mandate (Use your Frontend Skills):
-1. BEYOND GENERIC: Avoid "AI slop" aesthetics. Choose a bold direction (e.g., Brutalist, Retro-futuristic, Luxury Minimalist).
-2. TYPOGRAPHY & COLOR: Use distinctive, high-quality font pairings and cohesive, intentional color palettes.
-3. MOTION & DEPTH: Incorporate smooth CSS animations, glassmorphism, noise textures, or gradient meshes to create a sense of premium quality.
-4. RENDER: Use the 'htmly' tool to bundle your HTML/CSS/JS and provide the live preview link.`
-          }
+      messages: [{
+        role: "user",
+        content: {
+          type: "text",
+          text: `You are a high-end UI/UX Visualizer. Render this content as a beautiful HTML document using Htmly.\n\n<content>\n${content}\n</content>`
         }
-      ]
+      }]
     })
   );
 
@@ -88,7 +64,7 @@ Design Mandate (Use your Frontend Skills):
 
 const app = express();
 
-// Research-backed: Disable compression for SSE routes
+// Disable compression for SSE
 app.use(compression({
   filter: (req, res) => {
     if (req.headers['accept'] === 'text/event-stream') return false;
@@ -108,33 +84,30 @@ async function main() {
     app.use(express.json());
     app.use(express.static(PUBLIC_DIR));
 
-    // Simple Stateless REST API
     app.post("/host", async (req, res) => {
-      try {
-        const { files, entryPoint } = req.body;
-        const url = await hostFilesAsync(files, entryPoint);
-        res.json({ url });
-      } catch (err) {
-        res.status(500).json({ error: "Failed to host files" });
-      }
+      const { files, entryPoint } = req.body;
+      const url = await hostFilesAsync(files, entryPoint);
+      res.json({ url });
     });
 
-    // Robust MCP SSE Endpoint
     app.get("/sse", async (req, res) => {
-      // Research-backed headers for Cloudflare streaming stability
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no'
-      });
-      res.write(': ok\n\n');
+      // Set headers for maximum proxy compatibility
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
 
       const server = createMcpServer();
       const transport = new SSEServerTransport("/messages", res);
+      
+      // The SDK sends the endpoint event, but we'll add heartbeats to keep the H2 stream open
+      const heartbeat = setInterval(() => {
+        res.write(': heartbeat\n\n');
+      }, 15000);
+
       transports.set(transport.sessionId, transport);
       
-      const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 20000);
       res.on("close", () => {
         clearInterval(heartbeat);
         transports.delete(transport.sessionId);
@@ -149,9 +122,7 @@ async function main() {
       else res.status(404).send("Session not found");
     });
 
-    app.listen(PORT, "0.0.0.0", () => {
-      console.error(`Htmly (v2.1.0) running at ${BASE_URL} (Port ${PORT})`);
-    });
+    app.listen(PORT, "0.0.0.0", () => console.error(`Htmly (v2.2.0) listening at ${BASE_URL}`));
   }
 }
 
