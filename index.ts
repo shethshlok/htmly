@@ -13,6 +13,9 @@ const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `https://html.shloksheth.tech`;
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 const SSE_HEARTBEAT_INTERVAL_MS = 25_000;
+const HOSTED_FILE_TTL_MS = 24 * 60 * 60 * 1000;
+const HOSTED_FILE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const HOSTED_FILE_METADATA_NAME = ".htmly.json";
 
 async function ensureDir(dir: string) {
   try {
@@ -20,6 +23,61 @@ async function ensureDir(dir: string) {
   } catch {
     await fs.mkdir(dir, { recursive: true });
   }
+}
+
+function isGeneratedWorkspaceName(name: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(name);
+}
+
+async function getHostedWorkspaceCreatedAt(workspaceDir: string) {
+  try {
+    const metadata = JSON.parse(
+      await fs.readFile(path.join(workspaceDir, HOSTED_FILE_METADATA_NAME), "utf8")
+    ) as { createdAt?: string };
+    const createdAtMs = metadata.createdAt ? Date.parse(metadata.createdAt) : Number.NaN;
+    if (Number.isFinite(createdAtMs)) return createdAtMs;
+  } catch {
+    // Older workspaces may not have metadata. Fall back to filesystem timestamps.
+  }
+
+  const stats = await fs.stat(workspaceDir);
+  return Math.min(stats.birthtimeMs, stats.mtimeMs);
+}
+
+async function isHostedWorkspaceExpired(workspaceDir: string, now = Date.now()) {
+  const createdAtMs = await getHostedWorkspaceCreatedAt(workspaceDir);
+  return now - createdAtMs >= HOSTED_FILE_TTL_MS;
+}
+
+async function cleanupExpiredHostedWorkspaces() {
+  const now = Date.now();
+  const entries = await fs.readdir(PUBLIC_DIR, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isGeneratedWorkspaceName(entry.name)) continue;
+
+    const workspaceDir = path.join(PUBLIC_DIR, entry.name);
+    try {
+      if (await isHostedWorkspaceExpired(workspaceDir, now)) {
+        await fs.rm(workspaceDir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      console.error(`Failed to clean hosted workspace ${entry.name}:`, error);
+    }
+  }
+}
+
+function startHostedWorkspaceCleanup() {
+  cleanupExpiredHostedWorkspaces().catch((error) => {
+    console.error("Initial hosted workspace cleanup failed:", error);
+  });
+
+  const cleanupInterval = setInterval(() => {
+    cleanupExpiredHostedWorkspaces().catch((error) => {
+      console.error("Hosted workspace cleanup failed:", error);
+    });
+  }, HOSTED_FILE_CLEANUP_INTERVAL_MS);
+  cleanupInterval.unref();
 }
 
 async function hostFilesAsync(files: { name: string, content: string }[], entryPoint: string = "index.html") {
@@ -30,6 +88,10 @@ async function hostFilesAsync(files: { name: string, content: string }[], entryP
   await ensureDir(requestDir);
   await Promise.all(
     files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
+  );
+  await fs.writeFile(
+    path.join(requestDir, HOSTED_FILE_METADATA_NAME),
+    JSON.stringify({ createdAt: new Date().toISOString() })
   );
 
   return url;
@@ -77,6 +139,30 @@ app.use(compression({
     return compression.filter(req, res);
   }
 }));
+app.use(async (req, res, next) => {
+  const workspaceName = decodeURIComponent(req.path.split("/")[1] ?? "");
+  if (!isGeneratedWorkspaceName(workspaceName)) {
+    next();
+    return;
+  }
+
+  const workspaceDir = path.join(PUBLIC_DIR, workspaceName);
+  try {
+    if (await isHostedWorkspaceExpired(workspaceDir)) {
+      res.status(410).send("Hosted HTML expired after 24 hours.");
+      fs.rm(workspaceDir, { recursive: true, force: true }).catch((error) => {
+        console.error(`Failed to remove expired hosted workspace ${workspaceName}:`, error);
+      });
+      return;
+    }
+  } catch (error: any) {
+    if (error?.code !== "ENOENT") {
+      console.error(`Failed to check hosted workspace ${workspaceName}:`, error);
+    }
+  }
+
+  next();
+});
 app.use(express.static(PUBLIC_DIR));
 
 // Routes
@@ -198,6 +284,7 @@ app.all("/mcp", async (req, res) => {
 
 async function main() {
   await ensureDir(PUBLIC_DIR);
+  startHostedWorkspaceCleanup();
 
   if (process.env.TRANSPORT === "stdio") {
     const server = createMcpServer();

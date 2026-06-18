@@ -9,7 +9,7 @@ Live at: [https://html.shloksheth.tech](https://html.shloksheth.tech)
 - **Push-to-Visualize**: Instantly render any HTML/CSS/JS bundle.
 - **Multi-File Support**: Handles complete project structures (index.html, styles.css, app.js, etc.).
 - **Workspace Isolation**: Every request gets a unique, cryptographically secure UUID workspace.
-- **7-Day Auto-Cleanup**: Automated background tasks purge expired workspaces to stay lean.
+- **24-Hour Auto-Cleanup**: Hosted HTML expires after 24 hours, with lightweight background cleanup to keep disk usage bounded.
 - **High Performance**: Parallelized file writes, Gzip compression, and optimized caching.
 - **Remote First**: Built using MCP Streamable HTTP, with SSE compatibility for legacy clients.
 
@@ -95,6 +95,8 @@ docker compose up --build -d
 | --- | --- | --- |
 | `PORT` | `3000` | The port the server listens on. |
 | `BASE_URL` | `https://html.shloksheth.tech` | The base URL for generated links. |
+
+Generated HTML workspaces are available for 24 hours. After that, stale links return `410 Gone` and the workspace is removed by the cleanup task.
 
 ---
 
