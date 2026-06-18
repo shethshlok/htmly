@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts",
-    "build": "bun build index.ts --outdir ./dist --target node"
+    "build": "bun build index.ts --outdir ./dist --target node",
+    "test:deployed": "bun test deployed.test.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

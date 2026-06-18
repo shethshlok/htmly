@@ -11,37 +11,63 @@ Live at: [https://html.shloksheth.tech](https://html.shloksheth.tech)
 - **Workspace Isolation**: Every request gets a unique, cryptographically secure UUID workspace.
 - **7-Day Auto-Cleanup**: Automated background tasks purge expired workspaces to stay lean.
 - **High Performance**: Parallelized file writes, Gzip compression, and optimized caching.
-- **Remote First**: Built using SSE (Server-Sent Events) for seamless remote connectivity.
+- **Remote First**: Built using MCP Streamable HTTP, with SSE compatibility for legacy clients.
 
 ## 🛠️ Architecture
 
 Htmly acts as a bridge between an **MCP Client** (like Claude Desktop or a CLI) and a **Web Browser**.
 
-1. **Client** pushes a bundle of files via the `render_files` tool.
+1. **Client** pushes a bundle of files via the `htmly` tool.
 2. **Engine** creates an isolated workspace and writes files in parallel.
 3. **Static Server** (Express) hosts the workspace immediately.
 4. **Agent** receives a live URL (e.g., `https://html.shloksheth.tech/{uuid}/index.html`) to present to the user.
 
 ## 🚀 Installation
 
-### 1. Claude Desktop
+### 1. Antigravity / Modern Remote MCP Clients
 
-Add this to your `claude_desktop_config.json`:
+Use the Streamable HTTP endpoint:
 
 ```json
 {
   "mcpServers": {
     "htmly": {
-      "url": "https://html.shloksheth.tech/sse"
+      "serverUrl": "https://html.shloksheth.tech/mcp"
     }
   }
 }
 ```
 
-### 2. Custom CLI / MCP Clients
+### 2. Claude Desktop / Clients Using `url`
 
-Point your SSE transport to:
+Use the same Streamable HTTP endpoint:
+
+```json
+{
+  "mcpServers": {
+    "htmly": {
+      "url": "https://html.shloksheth.tech/mcp"
+    }
+  }
+}
+```
+
+### 3. Legacy SSE Clients
+
+The SSE endpoint remains available for older clients:
 `https://html.shloksheth.tech/sse`
+
+### 4. Health Tests
+
+```bash
+bun run test:deployed
+```
+
+To test a local server or another deployment:
+
+```bash
+HTMLY_TEST_BASE_URL=http://127.0.0.1:3000 bun run test:deployed
+```
 
 ## 📦 Local Development
 

@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import express from "express";
 import compression from "compression";
@@ -64,6 +65,10 @@ function createMcpServer() {
 
 const app = express();
 const transports = new Map<string, SSEServerTransport>();
+const streamableSessions = new Map<string, {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+}>();
 
 // Middleware
 app.use(compression({
@@ -121,6 +126,74 @@ app.post("/messages", async (req, res) => {
   } else {
     res.status(404).send("Session not found");
   }
+});
+
+app.all("/mcp", async (req, res) => {
+  const sessionId = req.headers["mcp-session-id"];
+  const existingSession = typeof sessionId === "string"
+    ? streamableSessions.get(sessionId)
+    : undefined;
+
+  if (existingSession) {
+    if (req.method === "GET") {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "Mcp-Session-Id": sessionId,
+      });
+      res.write(`: connected ${Date.now()}\n\n`);
+
+      const heartbeat = setInterval(() => {
+        if (!res.destroyed) {
+          res.write(`: heartbeat ${Date.now()}\n\n`);
+        }
+      }, SSE_HEARTBEAT_INTERVAL_MS);
+
+      res.on("close", () => {
+        clearInterval(heartbeat);
+      });
+      return;
+    }
+
+    await existingSession.transport.handleRequest(req, res);
+    return;
+  }
+
+  if (sessionId) {
+    res.status(404).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32001,
+        message: "Session not found",
+      },
+      id: null,
+    });
+    return;
+  }
+
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: crypto.randomUUID,
+    enableJsonResponse: true,
+    onsessioninitialized: (newSessionId) => {
+      streamableSessions.set(newSessionId, { server, transport });
+    },
+    onsessionclosed: async (closedSessionId) => {
+      streamableSessions.delete(closedSessionId);
+      await server.close();
+    },
+  });
+
+  res.on("close", () => {
+    const newSessionId = transport.sessionId;
+    if (!newSessionId) {
+      server.close().catch(console.error);
+    }
+  });
+
+  await server.connect(transport);
+  await transport.handleRequest(req, res);
 });
 
 async function main() {
