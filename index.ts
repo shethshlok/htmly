@@ -117,7 +117,12 @@ When the user wants to see a preview or host some code:
 const app = express();
 const transports = new Map<string, SSEServerTransport>();
 
-app.use(compression());
+app.use(compression({
+  filter: (req, res) => {
+    if (req.path === "/sse") return false;
+    return compression.filter(req, res);
+  }
+}));
 app.use(express.static(PUBLIC_DIR, {
   maxAge: '1h',
   immutable: true,
