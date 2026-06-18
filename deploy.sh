@@ -1,44 +1,36 @@
 #!/bin/bash
 
 # Configuration
-PORT=6342
-BASE_URL="https://html.shloksheth.tech"
+CONTAINER_NAME="htmly-engine"
 PROCESS_NAME="bun run index.ts"
 
-echo "🚀 Starting Htmly Deployment..."
+echo "🚀 Starting Htmly Docker Deployment..."
 
 # 1. Pull latest changes
 echo "📥 Pulling latest changes from Git..."
 git pull
 
-# 2. Install dependencies
-echo "📦 Installing dependencies..."
-bun install
-
-# 3. Stop existing process
-echo "🛑 Stopping existing Htmly process..."
-# Find the PID of the process running the server
+# 2. Cleanup local process if running (from previous setup)
+echo "🧹 Checking for legacy local processes..."
 PID=$(pgrep -f "$PROCESS_NAME")
-if [ -z "$PID" ]; then
-    echo "ℹ️ No running process found."
-else
-    echo "kiliing process $PID"
+if [ -n "$PID" ]; then
+    echo "Stopping local process $PID..."
     kill $PID
-    # Wait for it to actually stop
     sleep 2
 fi
 
-# 4. Start the server in the background
-echo "⚡ Starting server on port $PORT..."
-nohup env PORT=$PORT BASE_URL=$BASE_URL bun run index.ts > server.log 2>&1 &
+# 3. Build and Start Container
+echo "🐳 Deploying via Docker..."
+docker compose up -d --build
 
-# 5. Verify
-sleep 2
-NEW_PID=$(pgrep -f "$PROCESS_NAME")
-if [ -n "$NEW_PID" ]; then
-    echo "✅ Htmly is running! (PID: $NEW_PID)"
-    echo "🔗 URL: $BASE_URL"
+# 4. Verify
+echo "🔍 Verifying deployment..."
+sleep 5
+if [ "$(docker inspect -f '{{.State.Running}}' $CONTAINER_NAME)" == "true" ]; then
+    echo "✅ Htmly is running in Docker!"
+    echo "🔗 URL: https://html.shloksheth.tech"
+    docker ps | grep $CONTAINER_NAME
 else
-    echo "❌ Failed to start server. Check server.log for details."
+    echo "❌ Docker container failed to start. Check logs with: docker logs $CONTAINER_NAME"
     exit 1
 fi
