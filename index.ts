@@ -115,5 +115,5 @@ if (process.env.TRANSPORT === "stdio") {
   });
 
   await ensureDir(PUBLIC_DIR);
-  app.listen(PORT, () => console.error(`Htmly (v1.5.0) ready at ${BASE_URL}`));
+  app.listen(PORT, "0.0.0.0", () => console.error(`Htmly (v1.5.0) ready at ${BASE_URL}`));
 }
