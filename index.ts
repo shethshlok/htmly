@@ -8,7 +8,7 @@ import path from "path";
 import crypto from "crypto";
 
 const PORT = process.env.PORT || 3000;
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL || `https://html.shloksheth.tech`;
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 const TTL_DAYS = 7;
 const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000;
