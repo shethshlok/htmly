@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Stack Developer | Booz Allen</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap">
+    <style>
+        :root {
+            --primary: #00467f;
+            --secondary: #0072bc;
+            --text: #333;
+            --light: #f4f7f6;
+            --accent: #ff6b6b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Inter", sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+            background-color: var(--light);
+        }
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 80px 20px;
+            text-align: center;
+        }
+        .hero h1 { font-size: 3rem; margin-bottom: 10px; }
+        .hero p { font-size: 1.2rem; opacity: 0.9; }
+        .container {
+            max-width: 900px;
+            margin: -50px auto 50px;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: var(--primary);
+            margin: 30px 0 15px;
+            font-size: 1.8rem;
+            border-bottom: 2px solid var(--light);
+            padding-bottom: 10px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        ul {
+            list-style: none;
+        }
+        li {
+            position: relative;
+            padding-left: 25px;
+            margin-bottom: 12px;
+        }
+        li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--secondary);
+            font-weight: bold;
+        }
+        .apply-btn {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 15px 40px;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 30px;
+            transition: transform 0.2s;
+        }
+        .apply-btn:hover { transform: scale(1.05); }
+        .footer {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Full Stack Developer</h1>
+        <p>Booz Allen | Vision to Production Ready</p>
+    </div>
+    <div class="container">
+        <div class="section">
+            <h2>The Opportunity</h2>
+            <p>As a full stack developer, you can resolve a problem with a complete end-to-end solution in a fast, agile environment. If you’re looking for the chance to not just develop software, but to help create a system that will make a difference, we need you on our team.</p>
+            <p style="margin-top:15px">This role is more than just coding. You’ll use your passion to learn new tools and techniques and identify needed system improvements. Help make sure the solution developed by the team considers the current architecture and operating environment.</p>
+        </div>
+        <div class="section">
+            <h2>You Have</h2>
+            <ul>
+                <li>2+ years of experience designing, modifying, developing, and implementing software</li>
+                <li>2+ years of experience with software development using basic programming languages</li>
+                <li>Experience writing source code for new applications or enhancing existing ones</li>
+                <li>Experience using back-end and front-end languages to develop complete solutions</li>
+                <li>Experience creating solutions to complex problems in a collaborative environment</li>
+                <li>Secret clearance</li>
+                <li>Bachelor's degree, or 5+ years of experience</li>
+            </ul>
+        </div>
+        <div class="section">
+            <h2>Nice To Have</h2>
+            <ul>
+                <li>Experience with Agile methodology, extreme programming, and product management</li>
+                <li>Experience with Java, Python, C#, C/C++, .NET, JavaScript, React, NodeJS, PHP, or Drupal</li>
+                <li>Ability to acquire client requirements and resolve workflow problems</li>
+                <li>Ability to work with automated testing tools</li>
+            </ul>
+        </div>
+        <div style="text-align: center;">
+            <a href="#" class="apply-btn">Apply Now</a>
+        </div>
+    </div>
+    <div class="footer">
+        Join us. The world can’t wait.
+    </div>
+</body>
+</html>
