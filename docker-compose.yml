@@ -1,12 +1,21 @@
 services:
   mcp-html-server:
-    build: .
+    build:
+      context: .
+      args:
+        PUBLIC_URL: ${BASE_URL:-https://html.shloksheth.tech}
     container_name: htmly-engine
     ports:
       - "6342:3000"
     environment:
       - PORT=3000
-      - BASE_URL=https://html.shloksheth.tech
+      - BASE_URL=${BASE_URL:-https://html.shloksheth.tech}
     volumes:
       - ./public:/app/public
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://127.0.0.1:3000/healthz'); if (!r.ok) process.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped

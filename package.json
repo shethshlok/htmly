@@ -5,8 +5,12 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts",
-    "build": "bun build index.ts --outdir ./dist --target node",
-    "test:deployed": "bun test deployed.test.ts"
+    "build": "bun run build:web && bun run build:server",
+    "build:server": "bun build index.ts --outdir ./dist --target bun",
+    "build:web": "bun run --cwd web build",
+    "dev:web": "bun run --cwd web dev",
+    "test:deployed": "bun test deployed.test.ts",
+    "test:deployed:stability": "bun test deployed.stability.test.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

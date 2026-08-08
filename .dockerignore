@@ -1,6 +1,12 @@
-node_modules
-dist
 .git
 .gitignore
+.DS_Store
+node_modules
+dist
 *.log
-.env
+.env*
+web/.next
+web/node_modules
+web/out
+web/*.tsbuildinfo
+/public

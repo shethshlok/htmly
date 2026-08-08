@@ -1,0 +1,35 @@
+# Htmly
+
+> Htmly is a hosted MCP (Model Context Protocol) server that lets AI agents render real web pages instead of replying with plain markdown text. An agent writes HTML/CSS/JS, pushes it through a single tool, and instantly receives a live, hosted preview URL — so the user can see the result in a visual way, not just read about it. No install, no local process, just a URL.
+
+Htmly also provides an installable Agent Skill that teaches agents when a visual deliverable is more useful than prose and how to structure plans, reviews, code walkthroughs, comparisons, diagrams, dashboards, and reports as accessible interactive pages.
+
+Htmly is built on the Model Context Protocol and connects over remote MCP transport. It exposes one tool, `htmly`, which accepts a bundle of files (e.g. `index.html`, `styles.css`, `app.js`), writes them to an isolated, cryptographically unique workspace, hosts them, and returns a live link. Workspaces stay online for 24 hours before expiring.
+
+## Connecting
+
+- MCP endpoint: `https://html.shloksheth.tech/mcp`
+- Legacy SSE endpoint: `https://html.shloksheth.tech/sse`
+- Tool exposed: `htmly` (params: `files[]` of `{ name, content }`, optional `entryPoint`, defaults to `index.html`)
+- Agent Skill: `https://github.com/shethshlok/htmly/tree/main/skills/htmly`
+- Codex install prompt: `Use $skill-installer to install https://github.com/shethshlok/htmly/tree/main/skills/htmly`
+- Transport: Streamable HTTP, with legacy SSE support
+
+## How to add the server
+
+- [Claude Desktop](https://htmly.shloksheth.tech/#install): add to `claude_desktop_config.json` under `mcpServers` -> `htmly` -> `url: https://html.shloksheth.tech/mcp`, then restart.
+- [Claude Code](https://htmly.shloksheth.tech/#install): run `claude mcp add --transport http htmly https://html.shloksheth.tech/mcp`
+- [Cursor](https://htmly.shloksheth.tech/#install): add the same `mcpServers` block to `.cursor/mcp.json`.
+- [VS Code (Copilot Agent)](https://htmly.shloksheth.tech/#install): add to `.vscode/mcp.json` under `servers` with `type: "http"` and the URL.
+- [Any MCP client](https://htmly.shloksheth.tech/#install): point remote MCP transport at `https://html.shloksheth.tech/mcp`, or use `https://html.shloksheth.tech/sse` for legacy SSE-only clients.
+
+## Links
+
+- [Landing page](https://htmly.shloksheth.tech): overview, install instructions, and FAQ.
+- [Live server](https://html.shloksheth.tech): the running Htmly engine and hosted previews.
+- [Author](https://github.com/shethshlok): Shlok Sheth on GitHub.
+
+## Notes
+
+- Htmly is free to use and remote-first; nothing runs on the user's machine.
+- It can also be self-hosted (built with Bun, ships with a Dockerfile); set `BASE_URL` to a custom domain.

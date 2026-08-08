@@ -1,103 +1,65 @@
-# Htmly 🚀
+# Htmly
 
-**Htmly** is a high-fidelity HTML rendering and visualization engine built on the **Model Context Protocol (MCP)**. It allows AI agents and CLI tools to "push" HTML/CSS/JS code to a remote server and get an instant, hosted preview link.
+Htmly is one self-hosted application containing both:
 
-Live at: [https://html.shloksheth.tech](https://html.shloksheth.tech)
+- the public marketing and onboarding site;
+- the MCP service that hosts generated HTML previews.
 
-## ✨ Features
+The marketing source lives in `web/` and is exported as static files during the Docker build. The Bun/Express service serves that export alongside its API and preview routes, so Vercel is not required.
 
-- **Push-to-Visualize**: Instantly render any HTML/CSS/JS bundle.
-- **Multi-File Support**: Handles complete project structures (index.html, styles.css, app.js, etc.).
-- **Workspace Isolation**: Every request gets a unique, cryptographically secure UUID workspace.
-- **24-Hour Auto-Cleanup**: Hosted HTML expires after 24 hours, with lightweight background cleanup to keep disk usage bounded.
-- **High Performance**: Parallelized file writes, Gzip compression, and optimized caching.
-- **Remote First**: Built using MCP Streamable HTTP, with SSE compatibility for legacy clients.
+## Routes
 
-## 🛠️ Architecture
+| Route | Purpose |
+| --- | --- |
+| `/` | Marketing and onboarding site |
+| `/mcp` | MCP Streamable HTTP endpoint |
+| `/sse` and `/messages` | Legacy MCP SSE transport |
+| `/host` | Direct HTML hosting API |
+| `/{workspace}/{file}` | Generated preview files |
+| `/healthz` | Container health check |
 
-Htmly acts as a bridge between an **MCP Client** (like Claude Desktop or a CLI) and a **Web Browser**.
+Generated workspaces remain online for 24 hours. The `public/` directory is mounted into the container for persistence, while the marketing build is baked into `/app/site`. Keeping these locations separate prevents the persistent volume from hiding the landing page.
 
-1. **Client** pushes a bundle of files via the `htmly` tool.
-2. **Engine** creates an isolated workspace and writes files in parallel.
-3. **Static Server** (Express) hosts the workspace immediately.
-4. **Agent** receives a live URL (e.g., `https://html.shloksheth.tech/{uuid}/index.html`) to present to the user.
-
-## 🚀 Installation
-
-### 1. Antigravity / Modern Remote MCP Clients
-
-Use the Streamable HTTP endpoint:
-
-```json
-{
-  "mcpServers": {
-    "htmly": {
-      "serverUrl": "https://html.shloksheth.tech/mcp"
-    }
-  }
-}
-```
-
-### 2. Claude Desktop / Clients Using `url`
-
-Use the same Streamable HTTP endpoint:
-
-```json
-{
-  "mcpServers": {
-    "htmly": {
-      "url": "https://html.shloksheth.tech/mcp"
-    }
-  }
-}
-```
-
-### 3. Legacy SSE Clients
-
-The SSE endpoint remains available for older clients:
-`https://html.shloksheth.tech/sse`
-
-### 4. Health Tests
+## Local development
 
 ```bash
-bun run test:deployed
+bun install --frozen-lockfile
+bun install --cwd web --frozen-lockfile
+
+# Build the static site and start the combined service.
+NEXT_PUBLIC_HTMLY_URL=http://127.0.0.1:3000 bun run build:web
+BASE_URL=http://127.0.0.1:3000 bun start
 ```
 
-To test a local server or another deployment:
+For frontend-only development, run `bun run dev:web`.
+
+## Build and test
 
 ```bash
+bun run build
 HTMLY_TEST_BASE_URL=http://127.0.0.1:3000 bun run test:deployed
 ```
 
-## 📦 Local Development
+## Docker deployment
 
-If you want to run your own instance of Htmly:
-
-### Using Bun (Recommended)
+`BASE_URL` controls both the links returned by the MCP server and the URL compiled into the marketing site:
 
 ```bash
-# Install dependencies
-bun install
-
-# Start the server
-bun start
+BASE_URL=https://html.shloksheth.tech docker compose up -d --build
+docker compose ps
+curl --fail https://html.shloksheth.tech/healthz
 ```
 
-### Using Docker
+The default remains `https://html.shloksheth.tech`, which avoids breaking existing MCP clients during the initial merge. See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for moving `htmly.shloksheth.tech` from Vercel to the computer and, optionally, making it the canonical hostname.
 
-```bash
-docker compose up --build -d
-```
-
-## ⚙️ Environment Variables
+## Environment variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `3000` | The port the server listens on. |
-| `BASE_URL` | `https://html.shloksheth.tech` | The base URL for generated links. |
+| `PORT` | `3000` | Internal Bun server port |
+| `BASE_URL` | `https://html.shloksheth.tech` | Public origin used in generated links |
+| `SITE_DIR` | `web/out` | Exported marketing site directory |
+| `HOSTED_DIR` | `public` | Persistent generated-preview directory |
+| `NEXT_PUBLIC_HTMLY_URL` | `https://html.shloksheth.tech` | Public origin embedded in a local frontend build |
 
-Generated HTML workspaces are available for 24 hours. After that, stale links return `410 Gone` and the workspace is removed by the cleanup task.
-
----
-
-Built with ❤️ by [Shlok Sheth](https://github.com/shethshlok)
+Built with Bun, Next.js, and the Model Context Protocol SDK.

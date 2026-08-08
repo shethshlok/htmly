@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #07070b;
+  --color-bg-soft: #0d0d16;
+  --color-card: #12121d;
+  --color-border: #232336;
+  --color-ink: #f4f4f8;
+  --color-muted: #9a9ab0;
+  --color-brand: #8b7bff;
+  --color-brand-2: #4dd0ff;
+  --color-cream: #dedbc8;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: "Instrument Serif", Georgia, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  font-family: "Almarai", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+}
+
+::selection {
+  background: var(--color-brand);
+  color: #07070b;
+}
+
+.glow {
+  background: radial-gradient(
+    60% 60% at 50% 0%,
+    rgba(139, 123, 255, 0.18) 0%,
+    rgba(77, 208, 255, 0.06) 40%,
+    transparent 70%
+  );
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+}
+
+/* Cinematic hero: fractal-noise film grain (ref: Prisma) */
+.noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+}
+
+/* Slow drifting moody glow behind the hero */
+.cine-glow {
+  background:
+    radial-gradient(40% 50% at 25% 30%, rgba(139, 123, 255, 0.22), transparent 70%),
+    radial-gradient(45% 55% at 80% 25%, rgba(77, 208, 255, 0.16), transparent 70%),
+    radial-gradient(60% 60% at 50% 90%, rgba(222, 219, 200, 0.06), transparent 70%);
+  animation: cine-drift 22s ease-in-out infinite alternate;
+}
+
+@keyframes cine-drift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(3%, 3%, 0) scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cine-glow {
+    animation: none;
+  }
+}

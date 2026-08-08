@@ -11,7 +11,8 @@ import crypto from "crypto";
 
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `https://html.shloksheth.tech`;
-const PUBLIC_DIR = path.join(process.cwd(), "public");
+const HOSTED_DIR = path.resolve(process.env.HOSTED_DIR || path.join(process.cwd(), "public"));
+const SITE_DIR = path.resolve(process.env.SITE_DIR || path.join(process.cwd(), "web", "out"));
 const SSE_HEARTBEAT_INTERVAL_MS = 25_000;
 const HOSTED_FILE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOSTED_FILE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -51,12 +52,12 @@ async function isHostedWorkspaceExpired(workspaceDir: string, now = Date.now()) 
 
 async function cleanupExpiredHostedWorkspaces() {
   const now = Date.now();
-  const entries = await fs.readdir(PUBLIC_DIR, { withFileTypes: true });
+  const entries = await fs.readdir(HOSTED_DIR, { withFileTypes: true });
 
   for (const entry of entries) {
     if (!entry.isDirectory() || !isGeneratedWorkspaceName(entry.name)) continue;
 
-    const workspaceDir = path.join(PUBLIC_DIR, entry.name);
+    const workspaceDir = path.join(HOSTED_DIR, entry.name);
     try {
       if (await isHostedWorkspaceExpired(workspaceDir, now)) {
         await fs.rm(workspaceDir, { recursive: true, force: true });
@@ -82,7 +83,7 @@ function startHostedWorkspaceCleanup() {
 
 async function hostFilesAsync(files: { name: string, content: string }[], entryPoint: string = "index.html") {
   const requestId = crypto.randomUUID();
-  const requestDir = path.join(PUBLIC_DIR, requestId);
+  const requestDir = path.join(HOSTED_DIR, requestId);
   const url = `${BASE_URL}/${requestId}/${entryPoint}`;
 
   await ensureDir(requestDir);
@@ -99,20 +100,6 @@ async function hostFilesAsync(files: { name: string, content: string }[], entryP
 
 function createMcpServer() {
   const server = new McpServer({ name: "Htmly", version: "2.2.0" });
-
-  server.prompt(
-    "visualize",
-    { content: z.string().describe("Content to visualize") },
-    ({ content }) => ({
-      messages: [{
-        role: "user",
-        content: {
-          type: "text",
-          text: `You are a high-end UI/UX Visualizer. Render this content as a beautiful HTML document using Htmly.\n\n<content>\n${content}\n</content>`
-        }
-      }]
-    })
-  );
 
   server.tool("htmly", "Host HTML instantly for visualization.", {
     files: z.array(z.object({ name: z.string(), content: z.string() })),
@@ -146,7 +133,7 @@ app.use(async (req, res, next) => {
     return;
   }
 
-  const workspaceDir = path.join(PUBLIC_DIR, workspaceName);
+  const workspaceDir = path.join(HOSTED_DIR, workspaceName);
   try {
     if (await isHostedWorkspaceExpired(workspaceDir)) {
       res.status(410).send("Hosted HTML expired after 24 hours.");
@@ -163,9 +150,16 @@ app.use(async (req, res, next) => {
 
   next();
 });
-app.use(express.static(PUBLIC_DIR));
+// Generated previews are checked first so their root-level UUID URLs keep working.
+// The marketing site is built separately and baked into the container image.
+app.use(express.static(HOSTED_DIR));
+app.use(express.static(SITE_DIR));
 
 // Routes
+app.get("/healthz", (_req, res) => {
+  res.json({ status: "ok", service: "htmly", version: "2.2.0" });
+});
+
 app.post("/host", express.json(), async (req, res) => {
   const { files, entryPoint } = req.body;
   const url = await hostFilesAsync(files, entryPoint);
@@ -283,7 +277,7 @@ app.all("/mcp", async (req, res) => {
 });
 
 async function main() {
-  await ensureDir(PUBLIC_DIR);
+  await ensureDir(HOSTED_DIR);
   startHostedWorkspaceCleanup();
 
   if (process.env.TRANSPORT === "stdio") {

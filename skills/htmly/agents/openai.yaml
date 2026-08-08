@@ -1,0 +1,13 @@
+interface:
+  display_name: "Htmly"
+  short_description: "Turn complex answers into live visual pages"
+  default_prompt: "Use $htmly to turn this work into a clear, interactive visual page."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "htmly"
+      description: "Hosts HTML, CSS, and JavaScript as a temporary live page"
+      transport: "streamable_http"
+      url: "https://html.shloksheth.tech/mcp"
+policy:
+  allow_implicit_invocation: true
