@@ -1,4 +1,4 @@
-FROM oven/bun:latest AS web-builder
+FROM oven/bun:1.3.1 AS web-builder
 
 WORKDIR /app/web
 
@@ -11,7 +11,7 @@ ARG PUBLIC_URL=https://html.shloksheth.tech
 ENV NEXT_PUBLIC_HTMLY_URL=$PUBLIC_URL
 RUN bun run build
 
-FROM oven/bun:latest
+FROM oven/bun:1.3.1
 
 # Set working directory
 WORKDIR /app
