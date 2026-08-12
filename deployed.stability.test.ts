@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 const BASE_URL = (process.env.HTMLY_TEST_BASE_URL ?? "https://html.shloksheth.tech").replace(/\/$/, "");
 const MCP_URL = `${BASE_URL}/mcp`;
@@ -80,15 +79,18 @@ test("deployed MCP endpoint survives realistic concurrent Antigravity-style sess
     const client = new Client({
       name: `htmly-stability-${clientIndex}`,
       version: "1.0.0",
+    }, {
+      versionNegotiation: { mode: { pin: "2026-07-28" } },
     });
     const transport = new StreamableHTTPClientTransport(new URL(MCP_URL));
 
     try {
       await client.connect(transport);
+      expect(client.getProtocolEra()).toBe("modern");
 
       const tools = await client.listTools();
       expect(tools.tools.find((tool) => tool.name === "htmly")?.description).toContain("Host HTML");
-      expect(transport.sessionId).toBeTruthy();
+      expect(transport.sessionId).toBeUndefined();
 
       for (let callIndex = 0; callIndex < CALLS_PER_CLIENT; callIndex += 1) {
         const marker = `stability-${clientIndex}-${callIndex}-${crypto.randomUUID()}`;
@@ -121,7 +123,6 @@ test("deployed MCP endpoint survives realistic concurrent Antigravity-style sess
         expect(js).toContain(marker);
       }
     } finally {
-      await transport.terminateSession().catch(() => undefined);
       await client.close();
     }
   }));

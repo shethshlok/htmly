@@ -28,7 +28,7 @@ curl --fail https://html.shloksheth.tech/healthz
 HTMLY_TEST_BASE_URL=https://html.shloksheth.tech bun run test:deployed
 ```
 
-The root URL should now return the marketing page instead of the previous 404, while `/mcp`, `/sse`, and generated preview URLs continue to work.
+The root URL should return the marketing page, `/mcp` should serve stateless MCP `2026-07-28` plus stateless 2025-era compatibility, and generated preview URLs should continue to work. `/sse` now returns a `410` migration response because the obsolete SSE transport has been retired.
 
 ## 3. Move the Vercel hostname to the computer
 
@@ -59,7 +59,13 @@ Keeping `html.shloksheth.tech` canonical is the zero-breakage option. To make `h
 BASE_URL=https://htmly.shloksheth.tech docker compose up -d --build
 ```
 
-Keep `html.shloksheth.tech` routed to the same service so existing MCP configurations continue working. Because MCP clients may POST or hold event streams, do not use a blanket HTTP redirect on the old hostname for `/mcp`, `/sse`, or `/messages`.
+Keep `html.shloksheth.tech` routed to the same service so existing MCP configurations continue working. Do not use a blanket HTTP redirect on `/mcp`; MCP clients POST protocol requests to that exact endpoint.
+
+## MCP protocol compatibility
+
+The server uses the stable MCP TypeScript SDK v2 and the `2026-07-28` protocol. Modern clients use `server/discover` and send self-contained requests. Older Streamable HTTP clients that use the 2025 initialization exchange are served by the SDK's stateless compatibility path at the same `/mcp` URL. Old SSE-only configurations must be changed from `/sse` to `/mcp`.
+
+Because protocol sessions are gone, multiple Docker replicas do not require sticky routing or a shared MCP session store. Generated previews still live in `public/`, however, so multi-host replicas require shared object storage before they can serve each other's preview URLs.
 
 ## Rollback
 

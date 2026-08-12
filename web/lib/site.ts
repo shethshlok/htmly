@@ -5,4 +5,3 @@ export const SITE_URL = (
 ).replace(/\/$/, "");
 
 export const MCP_URL = `${SITE_URL}/mcp`;
-export const LEGACY_SSE_URL = `${SITE_URL}/sse`;

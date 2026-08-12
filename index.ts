@@ -1,29 +1,34 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  McpServer,
+  createMcpHandler,
+  hostHeaderValidationResponse,
+} from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
-import express from "express";
-import compression from "compression";
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 
-const PORT = process.env.PORT || 3000;
-const BASE_URL = process.env.BASE_URL || `https://html.shloksheth.tech`;
+const APP_VERSION = "3.0.0";
+const MCP_PROTOCOL_VERSION = "2026-07-28";
+const PORT = Number(process.env.PORT || 3000);
+const BASE_URL = (process.env.BASE_URL || "https://html.shloksheth.tech").replace(/\/$/, "");
 const HOSTED_DIR = path.resolve(process.env.HOSTED_DIR || path.join(process.cwd(), "public"));
 const SITE_DIR = path.resolve(process.env.SITE_DIR || path.join(process.cwd(), "web", "out"));
-const SSE_HEARTBEAT_INTERVAL_MS = 25_000;
 const HOSTED_FILE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOSTED_FILE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const HOSTED_FILE_METADATA_NAME = ".htmly.json";
 
+const hostRequestSchema = z.object({
+  files: z.array(z.object({
+    name: z.string().min(1),
+    content: z.string(),
+  })).min(1),
+  entryPoint: z.string().min(1).optional().default("index.html"),
+});
+
 async function ensureDir(dir: string) {
-  try {
-    await fs.access(dir);
-  } catch {
-    await fs.mkdir(dir, { recursive: true });
-  }
+  await fs.mkdir(dir, { recursive: true });
 }
 
 function isGeneratedWorkspaceName(name: string) {
@@ -33,12 +38,12 @@ function isGeneratedWorkspaceName(name: string) {
 async function getHostedWorkspaceCreatedAt(workspaceDir: string) {
   try {
     const metadata = JSON.parse(
-      await fs.readFile(path.join(workspaceDir, HOSTED_FILE_METADATA_NAME), "utf8")
+      await fs.readFile(path.join(workspaceDir, HOSTED_FILE_METADATA_NAME), "utf8"),
     ) as { createdAt?: string };
     const createdAtMs = metadata.createdAt ? Date.parse(metadata.createdAt) : Number.NaN;
     if (Number.isFinite(createdAtMs)) return createdAtMs;
   } catch {
-    // Older workspaces may not have metadata. Fall back to filesystem timestamps.
+    // Workspaces created before metadata support use filesystem timestamps.
   }
 
   const stats = await fs.stat(workspaceDir);
@@ -46,8 +51,7 @@ async function getHostedWorkspaceCreatedAt(workspaceDir: string) {
 }
 
 async function isHostedWorkspaceExpired(workspaceDir: string, now = Date.now()) {
-  const createdAtMs = await getHostedWorkspaceCreatedAt(workspaceDir);
-  return now - createdAtMs >= HOSTED_FILE_TTL_MS;
+  return now - await getHostedWorkspaceCreatedAt(workspaceDir) >= HOSTED_FILE_TTL_MS;
 }
 
 async function cleanupExpiredHostedWorkspaces() {
@@ -81,214 +85,237 @@ function startHostedWorkspaceCleanup() {
   cleanupInterval.unref();
 }
 
-async function hostFilesAsync(files: { name: string, content: string }[], entryPoint: string = "index.html") {
+async function hostFilesAsync(
+  files: { name: string; content: string }[],
+  entryPoint = "index.html",
+) {
+  const normalizedFiles = files.map((file) => ({
+    name: path.basename(file.name),
+    content: file.content,
+  }));
+  const normalizedEntryPoint = path.basename(entryPoint);
+  const names = new Set(normalizedFiles.map((file) => file.name));
+
+  if (names.size !== normalizedFiles.length) {
+    throw new Error("File names must be unique after path normalization.");
+  }
+  if (names.has(HOSTED_FILE_METADATA_NAME)) {
+    throw new Error(`${HOSTED_FILE_METADATA_NAME} is reserved.`);
+  }
+  if (!names.has(normalizedEntryPoint)) {
+    throw new Error(`Entry point ${normalizedEntryPoint} was not included in files.`);
+  }
+
   const requestId = crypto.randomUUID();
   const requestDir = path.join(HOSTED_DIR, requestId);
-  const url = `${BASE_URL}/${requestId}/${entryPoint}`;
+  const url = `${BASE_URL}/${requestId}/${encodeURIComponent(normalizedEntryPoint)}`;
 
   await ensureDir(requestDir);
-  await Promise.all(
-    files.map(file => fs.writeFile(path.join(requestDir, path.basename(file.name)), file.content))
-  );
+  await Promise.all(normalizedFiles.map((file) =>
+    fs.writeFile(path.join(requestDir, file.name), file.content)
+  ));
   await fs.writeFile(
     path.join(requestDir, HOSTED_FILE_METADATA_NAME),
-    JSON.stringify({ createdAt: new Date().toISOString() })
+    JSON.stringify({ createdAt: new Date().toISOString() }),
   );
 
   return url;
 }
 
-function createMcpServer() {
-  const server = new McpServer({ name: "Htmly", version: "2.2.0" });
+function createHtmlyServer() {
+  const server = new McpServer({ name: "Htmly", version: APP_VERSION });
 
-  server.tool("htmly", "Host HTML instantly for visualization.", {
-    files: z.array(z.object({ name: z.string(), content: z.string() })),
-    entryPoint: z.string().optional().default("index.html"),
-  }, async ({ files, entryPoint }) => {
-    const url = await hostFilesAsync(files, entryPoint);
-    return { content: [{ type: "text", text: `Hosted: ${url}` }] };
-  });
+  server.registerTool(
+    "htmly",
+    {
+      title: "Host HTML",
+      description: "Host HTML, CSS, and JavaScript files and return a live preview URL.",
+      inputSchema: hostRequestSchema,
+    },
+    async ({ files, entryPoint }) => {
+      const url = await hostFilesAsync(files, entryPoint);
+      return {
+        content: [{ type: "text", text: `Hosted: ${url}` }],
+        structuredContent: { url },
+      };
+    },
+  );
 
   return server;
 }
 
-const app = express();
-const transports = new Map<string, SSEServerTransport>();
-const streamableSessions = new Map<string, {
-  server: McpServer;
-  transport: StreamableHTTPServerTransport;
-}>();
+const mcpHandler = createMcpHandler(() => createHtmlyServer(), {
+  legacy: "stateless",
+  responseMode: "auto",
+  onerror: (error) => console.error("MCP request failed:", error),
+});
 
-// Middleware
-app.use(compression({
-  filter: (req, res) => {
-    if (req.headers['accept'] === 'text/event-stream') return false;
-    return compression.filter(req, res);
-  }
-}));
-app.use(async (req, res, next) => {
-  const workspaceName = decodeURIComponent(req.path.split("/")[1] ?? "");
-  if (!isGeneratedWorkspaceName(workspaceName)) {
-    next();
-    return;
-  }
+const allowedMcpHostnames = Array.from(new Set([
+  new URL(BASE_URL).hostname,
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+]));
 
-  const workspaceDir = path.join(HOSTED_DIR, workspaceName);
+function jsonResponse(body: unknown, status = 200) {
+  return Response.json(body, { status });
+}
+
+function withMcpCors(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Access-Control-Expose-Headers", "Mcp-Protocol-Version, Mcp-Session-Id");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function serveStatic(root: string, pathname: string, cacheControl: string) {
+  let decodedPath: string;
   try {
-    if (await isHostedWorkspaceExpired(workspaceDir)) {
-      res.status(410).send("Hosted HTML expired after 24 hours.");
-      fs.rm(workspaceDir, { recursive: true, force: true }).catch((error) => {
-        console.error(`Failed to remove expired hosted workspace ${workspaceName}:`, error);
-      });
-      return;
-    }
-  } catch (error: any) {
-    if (error?.code !== "ENOENT") {
-      console.error(`Failed to check hosted workspace ${workspaceName}:`, error);
-    }
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    return new Response("Bad request", { status: 400 });
   }
 
-  next();
-});
-// Generated previews are checked first so their root-level UUID URLs keep working.
-// The marketing site is built separately and baked into the container image.
-app.use(express.static(HOSTED_DIR));
-app.use(express.static(SITE_DIR));
+  let relativePath = decodedPath.replace(/^\/+/, "");
+  if (!relativePath || relativePath.endsWith("/")) relativePath += "index.html";
 
-// Routes
-app.get("/healthz", (_req, res) => {
-  res.json({ status: "ok", service: "htmly", version: "2.2.0" });
-});
-
-app.post("/host", express.json(), async (req, res) => {
-  const { files, entryPoint } = req.body;
-  const url = await hostFilesAsync(files, entryPoint);
-  res.json({ url });
-});
-
-app.get("/sse", async (req, res) => {
-  const server = createMcpServer();
-  const transport = new SSEServerTransport("/messages", res);
-  transports.set(transport.sessionId, transport);
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let closed = false;
-  
-  const cleanup = async () => {
-    if (closed) return;
-    closed = true;
-    if (heartbeat) {
-      clearInterval(heartbeat);
-      heartbeat = undefined;
-    }
-    transports.delete(transport.sessionId);
-    await server.close();
-  };
-
-  res.on("close", () => {
-    cleanup().catch(console.error);
-  });
-  
-  await server.connect(transport);
-  if (closed) return;
-
-  heartbeat = setInterval(() => {
-    if (!res.destroyed) {
-      res.write(`: heartbeat ${Date.now()}\n\n`);
-    }
-  }, SSE_HEARTBEAT_INTERVAL_MS);
-});
-
-app.post("/messages", async (req, res) => {
-  const sessionId = req.query.sessionId as string;
-  const transport = transports.get(sessionId);
-  if (transport) {
-    await transport.handlePostMessage(req, res);
-  } else {
-    res.status(404).send("Session not found");
-  }
-});
-
-app.all("/mcp", async (req, res) => {
-  const sessionId = req.headers["mcp-session-id"];
-  const existingSession = typeof sessionId === "string"
-    ? streamableSessions.get(sessionId)
-    : undefined;
-
-  if (existingSession) {
-    if (req.method === "GET") {
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-        "Mcp-Session-Id": sessionId,
-      });
-      res.write(`: connected ${Date.now()}\n\n`);
-
-      const heartbeat = setInterval(() => {
-        if (!res.destroyed) {
-          res.write(`: heartbeat ${Date.now()}\n\n`);
-        }
-      }, SSE_HEARTBEAT_INTERVAL_MS);
-
-      res.on("close", () => {
-        clearInterval(heartbeat);
-      });
-      return;
-    }
-
-    await existingSession.transport.handleRequest(req, res);
-    return;
+  const segments = relativePath.split("/");
+  if (segments.some((segment) => segment === ".." || segment.startsWith("."))) {
+    return undefined;
   }
 
-  if (sessionId) {
-    res.status(404).json({
-      jsonrpc: "2.0",
-      error: {
-        code: -32001,
-        message: "Session not found",
-      },
-      id: null,
+  let filePath = path.resolve(root, relativePath);
+  if (filePath !== root && !filePath.startsWith(`${root}${path.sep}`)) return undefined;
+
+  try {
+    const stats = await fs.stat(filePath);
+    if (stats.isDirectory()) filePath = path.join(filePath, "index.html");
+    const file = Bun.file(filePath);
+    if (!await file.exists()) return undefined;
+    return new Response(file, {
+      headers: { "Cache-Control": cacheControl },
     });
-    return;
+  } catch {
+    return undefined;
+  }
+}
+
+async function handleHttpRequest(request: Request) {
+  const url = new URL(request.url);
+
+  if (url.pathname === "/healthz" && request.method === "GET") {
+    return jsonResponse({
+      status: "ok",
+      service: "htmly",
+      version: APP_VERSION,
+      mcpProtocol: MCP_PROTOCOL_VERSION,
+      mcpMode: "stateless",
+    });
   }
 
-  const server = createMcpServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: crypto.randomUUID,
-    enableJsonResponse: true,
-    onsessioninitialized: (newSessionId) => {
-      streamableSessions.set(newSessionId, { server, transport });
-    },
-    onsessionclosed: async (closedSessionId) => {
-      streamableSessions.delete(closedSessionId);
-      await server.close();
-    },
-  });
-
-  res.on("close", () => {
-    const newSessionId = transport.sessionId;
-    if (!newSessionId) {
-      server.close().catch(console.error);
+  if (url.pathname === "/host" && request.method === "POST") {
+    try {
+      const body = hostRequestSchema.parse(await request.json());
+      return jsonResponse({ url: await hostFilesAsync(body.files, body.entryPoint) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid request";
+      return jsonResponse({ error: message }, 400);
     }
-  });
+  }
 
-  await server.connect(transport);
-  await transport.handleRequest(req, res);
-});
+  if (url.pathname === "/mcp") {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": [
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "Mcp-Method",
+            "Mcp-Name",
+            "Mcp-Protocol-Version",
+            "Mcp-Session-Id",
+          ].join(", "),
+        },
+      });
+    }
+
+    const invalidHost = hostHeaderValidationResponse(request, allowedMcpHostnames);
+    if (invalidHost) return withMcpCors(invalidHost);
+    return withMcpCors(await mcpHandler.fetch(request));
+  }
+
+  if (url.pathname === "/sse" || url.pathname === "/messages") {
+    return jsonResponse({
+      error: "Legacy SSE was retired. Connect using Streamable HTTP at /mcp.",
+      mcpEndpoint: `${BASE_URL}/mcp`,
+    }, 410);
+  }
+
+  const workspaceName = decodeURIComponent(url.pathname.split("/")[1] ?? "");
+  if (isGeneratedWorkspaceName(workspaceName)) {
+    const workspaceDir = path.join(HOSTED_DIR, workspaceName);
+    try {
+      if (await isHostedWorkspaceExpired(workspaceDir)) {
+        fs.rm(workspaceDir, { recursive: true, force: true }).catch(console.error);
+        return new Response("Hosted HTML expired after 24 hours.", { status: 410 });
+      }
+    } catch (error: any) {
+      if (error?.code !== "ENOENT") {
+        console.error(`Failed to check hosted workspace ${workspaceName}:`, error);
+      }
+    }
+
+    const hosted = await serveStatic(HOSTED_DIR, url.pathname, "public, max-age=300");
+    if (hosted) return hosted;
+  }
+
+  const site = await serveStatic(SITE_DIR, url.pathname, "public, max-age=300");
+  return site ?? new Response("Not found", { status: 404 });
+}
 
 async function main() {
   await ensureDir(HOSTED_DIR);
   startHostedWorkspaceCleanup();
 
   if (process.env.TRANSPORT === "stdio") {
-    const server = createMcpServer();
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-  } else {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.error(`Htmly (v2.2.0) listening at ${BASE_URL} (Port: ${PORT})`);
+    serveStdio(() => createHtmlyServer(), {
+      legacy: "serve",
+      onerror: (error) => console.error("MCP stdio failed:", error),
     });
+    return;
   }
+
+  const server = Bun.serve({
+    port: PORT,
+    hostname: "0.0.0.0",
+    fetch: handleHttpRequest,
+    error(error) {
+      console.error("Unhandled HTTP error:", error);
+      return jsonResponse({ error: "Internal server error" }, 500);
+    },
+  });
+
+  const shutdown = async () => {
+    await mcpHandler.close();
+    await server.stop();
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+
+  console.error(
+    `Htmly v${APP_VERSION} (${MCP_PROTOCOL_VERSION}, stateless) listening at ${BASE_URL} on port ${server.port}`,
+  );
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

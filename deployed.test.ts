@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 const BASE_URL = (process.env.HTMLY_TEST_BASE_URL ?? "https://html.shloksheth.tech").replace(/\/$/, "");
 
@@ -41,47 +39,41 @@ test("deployed HTTP /host uploads and serves HTML", async () => {
   expect(await hosted.text()).toContain(marker);
 }, 30_000);
 
-test("deployed SSE endpoint emits endpoint event and heartbeat", async () => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35_000);
+test("health check advertises stateless MCP 2026-07-28", async () => {
+  const response = await fetch(`${BASE_URL}/healthz`, {
+    signal: AbortSignal.timeout(12_000),
+  });
+  const body = await response.json() as {
+    status?: string;
+    mcpProtocol?: string;
+    mcpMode?: string;
+  };
 
-  try {
-    const response = await fetch(`${BASE_URL}/sse`, {
-      headers: { accept: "text/event-stream" },
-      signal: controller.signal,
-    });
+  expect(response.status).toBe(200);
+  expect(body.status).toBe("ok");
+  expect(body.mcpProtocol).toBe("2026-07-28");
+  expect(body.mcpMode).toBe("stateless");
+});
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toContain("text/event-stream");
-    expect(response.body).toBeTruthy();
+test("retired SSE endpoint directs clients to Streamable HTTP", async () => {
+  const response = await fetch(`${BASE_URL}/sse`, {
+    signal: AbortSignal.timeout(12_000),
+  });
+  const body = await response.json() as { mcpEndpoint?: string };
 
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let stream = "";
+  expect(response.status).toBe(410);
+  expect(body.mcpEndpoint).toBe(`${BASE_URL}/mcp`);
+});
 
-    while (!stream.includes(": heartbeat")) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      stream += decoder.decode(value, { stream: true });
-    }
-
-    await reader.cancel();
-
-    expect(stream).toContain("event: endpoint");
-    expect(stream).toContain("data: /messages?sessionId=");
-    expect(stream).toContain(": heartbeat");
-  } finally {
-    clearTimeout(timeout);
-  }
-}, 45_000);
-
-test("deployed MCP SSE client lists and calls htmly tool", async () => {
-  const client = new Client({ name: "htmly-deployed-test", version: "1.0.0" });
-  const transport = new SSEClientTransport(new URL(`${BASE_URL}/sse`));
-  const { marker, content } = uniqueHtml("mcp-sse");
+test("legacy 2025 client works through stateless compatibility", async () => {
+  const client = new Client({ name: "htmly-legacy-test", version: "1.0.0" });
+  const transport = new StreamableHTTPClientTransport(new URL(`${BASE_URL}/mcp`));
+  const { marker, content } = uniqueHtml("mcp-legacy");
 
   try {
     await client.connect(transport);
+    expect(client.getProtocolEra()).toBe("legacy");
+    expect(transport.sessionId).toBeUndefined();
 
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name)).toContain("htmly");
@@ -104,17 +96,21 @@ test("deployed MCP SSE client lists and calls htmly tool", async () => {
   }
 }, 45_000);
 
-test("deployed MCP Streamable HTTP client lists and calls htmly tool", async () => {
-  const client = new Client({ name: "htmly-deployed-streamable-test", version: "1.0.0" });
+test("modern MCP 2026-07-28 client lists and calls htmly without a session", async () => {
+  const client = new Client(
+    { name: "htmly-modern-test", version: "1.0.0" },
+    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+  );
   const transport = new StreamableHTTPClientTransport(new URL(`${BASE_URL}/mcp`));
-  const { marker, content } = uniqueHtml("mcp-http");
+  const { marker, content } = uniqueHtml("mcp-modern");
 
   try {
     await client.connect(transport);
+    expect(client.getProtocolEra()).toBe("modern");
 
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name)).toContain("htmly");
-    expect(transport.sessionId).toBeTruthy();
+    expect(transport.sessionId).toBeUndefined();
 
     const result = await client.callTool({
       name: "htmly",
@@ -130,7 +126,6 @@ test("deployed MCP Streamable HTTP client lists and calls htmly tool", async () 
     expect(hosted.status).toBe(200);
     expect(await hosted.text()).toContain(marker);
   } finally {
-    await transport.terminateSession().catch(() => undefined);
     await client.close();
   }
 }, 45_000);

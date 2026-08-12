@@ -5,26 +5,25 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts",
-    "build": "bun run build:web && bun run build:server",
+    "build": "bun run typecheck && bun run build:web && bun run build:server",
     "build:server": "bun build index.ts --outdir ./dist --target bun",
     "build:web": "bun run --cwd web build",
     "dev:web": "bun run --cwd web dev",
     "test:deployed": "bun test deployed.test.ts",
-    "test:deployed:stability": "bun test deployed.stability.test.ts"
+    "test:deployed:stability": "bun test deployed.stability.test.ts",
+    "test:stdio": "bun test stdio.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/bun": "latest",
-    "@types/compression": "^1.8.1",
-    "@types/express": "^5.0.6",
     "@types/node": "^25.9.3"
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "compression": "^1.8.1",
-    "express": "^5.2.1",
+    "@modelcontextprotocol/server": "2.0.0",
     "zod": "^4.4.3"
   }
 }

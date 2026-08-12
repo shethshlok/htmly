@@ -5,15 +5,17 @@ Htmly is one self-hosted application containing both:
 - the public marketing and onboarding site;
 - the MCP service that hosts generated HTML previews.
 
-The marketing source lives in `web/` and is exported as static files during the Docker build. The Bun/Express service serves that export alongside its API and preview routes, so Vercel is not required.
+The marketing source lives in `web/` and is exported as static files during the Docker build. One fetch-native Bun service serves that export alongside its API and preview routes, so Vercel is not required.
+
+The MCP endpoint implements MCP `2026-07-28` with the stable TypeScript SDK v2. Requests are stateless and sessionless: there is no `Mcp-Session-Id`, sticky routing, or always-open event stream. The same endpoint retains stateless compatibility with 2025-era Streamable HTTP clients.
 
 ## Routes
 
 | Route | Purpose |
 | --- | --- |
 | `/` | Marketing and onboarding site |
-| `/mcp` | MCP Streamable HTTP endpoint |
-| `/sse` and `/messages` | Legacy MCP SSE transport |
+| `/mcp` | Stateless MCP `2026-07-28` endpoint, with 2025 Streamable HTTP compatibility |
+| `/sse` and `/messages` | `410 Gone` migration response directing clients to `/mcp` |
 | `/host` | Direct HTML hosting API |
 | `/{workspace}/{file}` | Generated preview files |
 | `/healthz` | Container health check |
@@ -38,6 +40,7 @@ For frontend-only development, run `bun run dev:web`.
 ```bash
 bun run build
 HTMLY_TEST_BASE_URL=http://127.0.0.1:3000 bun run test:deployed
+HTMLY_TEST_BASE_URL=http://127.0.0.1:3000 bun run test:deployed:stability
 ```
 
 ## Docker deployment
@@ -62,4 +65,4 @@ The default remains `https://html.shloksheth.tech`, which avoids breaking existi
 | `HOSTED_DIR` | `public` | Persistent generated-preview directory |
 | `NEXT_PUBLIC_HTMLY_URL` | `https://html.shloksheth.tech` | Public origin embedded in a local frontend build |
 
-Built with Bun, Next.js, and the Model Context Protocol SDK.
+Built with Bun, Next.js, and Model Context Protocol TypeScript SDK v2.

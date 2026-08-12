@@ -20,10 +20,17 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+    "types": ["bun", "node"]
 
     // Some stricter flags (disabled by default)
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
-  }
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    // "noPropertyAccessFromIndexSignature": true
+  },
+  "include": [
+    "index.ts",
+    "deployed.test.ts",
+    "deployed.stability.test.ts",
+    "stdio.test.ts"
+  ]
 }

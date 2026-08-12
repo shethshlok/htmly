@@ -9,11 +9,10 @@ Htmly is built on the Model Context Protocol and connects over remote MCP transp
 ## Connecting
 
 - MCP endpoint: `https://html.shloksheth.tech/mcp`
-- Legacy SSE endpoint: `https://html.shloksheth.tech/sse`
 - Tool exposed: `htmly` (params: `files[]` of `{ name, content }`, optional `entryPoint`, defaults to `index.html`)
 - Agent Skill: `https://github.com/shethshlok/htmly/tree/main/skills/htmly`
 - Codex install prompt: `Use $skill-installer to install https://github.com/shethshlok/htmly/tree/main/skills/htmly`
-- Transport: Streamable HTTP, with legacy SSE support
+- Transport: stateless MCP `2026-07-28` over Streamable HTTP, with stateless 2025-era Streamable HTTP compatibility
 
 ## How to add the server
 
@@ -21,7 +20,7 @@ Htmly is built on the Model Context Protocol and connects over remote MCP transp
 - [Claude Code](https://htmly.shloksheth.tech/#install): run `claude mcp add --transport http htmly https://html.shloksheth.tech/mcp`
 - [Cursor](https://htmly.shloksheth.tech/#install): add the same `mcpServers` block to `.cursor/mcp.json`.
 - [VS Code (Copilot Agent)](https://htmly.shloksheth.tech/#install): add to `.vscode/mcp.json` under `servers` with `type: "http"` and the URL.
-- [Any MCP client](https://htmly.shloksheth.tech/#install): point remote MCP transport at `https://html.shloksheth.tech/mcp`, or use `https://html.shloksheth.tech/sse` for legacy SSE-only clients.
+- [Any MCP client](https://htmly.shloksheth.tech/#install): point its remote Streamable HTTP transport at `https://html.shloksheth.tech/mcp`.
 
 ## Links
 

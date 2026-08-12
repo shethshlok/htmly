@@ -1,6 +1,6 @@
-import { LEGACY_SSE_URL, MCP_URL } from "./site";
+import { MCP_URL } from "./site";
 
-export { LEGACY_SSE_URL, MCP_URL, SITE_URL } from "./site";
+export { MCP_URL, SITE_URL } from "./site";
 export const SKILL_URL =
   "https://github.com/shethshlok/htmly/tree/main/skills/htmly";
 export const SKILL_INSTALL_PROMPT = `Use $skill-installer to install ${SKILL_URL}`;
@@ -74,7 +74,7 @@ export const INSTALL_METHODS: InstallMethod[] = [
     id: "generic",
     label: "Any MCP client",
     blurb:
-      "Htmly speaks the Model Context Protocol over Streamable HTTP. Use the endpoint below, or the legacy SSE endpoint if your client requires SSE.",
+      "Htmly speaks stateless MCP 2026-07-28 over Streamable HTTP, with compatibility for older Streamable HTTP clients at the same endpoint.",
     location: "MCP endpoint",
     language: "bash",
     code: MCP_URL,
